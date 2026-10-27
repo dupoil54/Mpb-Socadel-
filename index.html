@@ -1,53 +1,326 @@
-<!doctype html>
-<html lang="fr"><head><meta charset="utf-8">
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#123c5a">
 <title>Socadel – Signalement de pannes</title>
 <style>
-:root{--bg:#f4f5f7;--cd:#fff;--tx:#1b1e22;--mu:#5f6873;--ac:#c2410c;--bd:#d9dde2;--ok:#15803d;--ko:#b91c1c;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#14161a;--cd:#1e2125;--tx:#eceef1;--mu:#9aa3ad;--ac:#ff8a4c;--bd:#343a41;--ok:#4ade80;--ko:#f87171}}
-:root[data-theme="dark"]{--bg:#14161a;--cd:#1e2125;--tx:#eceef1;--mu:#9aa3ad;--ac:#ff8a4c;--bd:#343a41;--ok:#4ade80;--ko:#f87171}
-html,body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
-main{max-width:560px;margin:0 auto;padding:12px}h1{font-size:19px;margin:4px 0 10px}h3{margin:0 0 8px;font-size:17px}
-.c{background:var(--cd);border:1px solid var(--bd);border-radius:12px;padding:12px;margin-bottom:12px}
-input,textarea{width:100%;box-sizing:border-box;margin:4px 0;padding:10px;font:inherit;color:var(--tx);background:var(--bg);border:1px solid var(--bd);border-radius:8px}
-input[type=checkbox]{width:auto;margin-right:8px}
-button{font:inherit;font-weight:600;padding:11px 14px;border:0;border-radius:8px;background:var(--ac);color:#fff;margin:4px 4px 0 0}
-button.g{background:var(--ok)}button.k{background:var(--ko)}button.w{display:block;width:100%;margin:8px 0;padding:16px}
-.m{color:var(--mu);font-size:14px}.b{font-size:12px;font-weight:700;padding:2px 8px;border-radius:99px;border:1px solid var(--bd)}
-.b.d,.b.non_resolue{color:var(--ko);border-color:var(--ko)}.b.resolue{color:var(--ok)}
-img{max-width:100%;border-radius:8px;margin-top:6px}.r{border-top:1px dashed var(--bd);margin-top:8px;padding-top:6px}
-label{display:block;padding:4px 0}#t{position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));background:var(--tx);color:var(--bg);padding:10px;border-radius:8px;display:none}
-</style></head><body><main id="app"></main><div id="t"></div>
+:root{--ink:#14202b;--bg:#eef1f4;--card:#fff;--blue:#123c5a;--amber:#f2a900;--green:#1e7d4f;--red:#b83227;--line:#d3dae1}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding-bottom:env(safe-area-inset-bottom)}
+header{background:var(--blue);color:#fff;display:flex;align-items:center;gap:10px;padding:12px 14px;padding-top:calc(12px + env(safe-area-inset-top));border-bottom:4px solid var(--amber)}
+header b{font-size:18px}header span{flex:1;opacity:.8;font-size:14px}
+header button{background:transparent;border:1px solid #fff8;color:#fff;padding:6px 10px;font-size:13px}
+main,.box{max-width:640px;margin:0 auto;padding:14px}
+.box{padding-top:calc(30px + env(safe-area-inset-top))}
+h1{margin:0 0 4px;font-size:28px}h2{font-size:18px;margin:18px 0 8px}
+input,select,textarea{width:100%;font:inherit;padding:11px;margin:5px 0;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink)}
+textarea{min-height:90px}
+button{font:inherit;font-weight:600;background:var(--blue);color:#fff;border:0;border-radius:6px;padding:11px 14px;margin:5px 0;cursor:pointer}
+button.alt{background:#fff;color:var(--blue);border:1px solid var(--blue)}
+button.big{width:100%;background:var(--amber);color:var(--ink);padding:16px;font-size:18px}
+button:disabled{opacity:.5}
+.row{display:flex;gap:8px}.row button{flex:1}
+.card{background:var(--card);border:1px solid var(--line);border-left:5px solid var(--blue);border-radius:6px;padding:12px;margin:10px 0}
+.top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.tag{font-size:12px;font-weight:700;padding:3px 8px;border-radius:10px;background:#e3e8ed}
+.tag.nouvelle{background:#fde7b0}.tag.assignee{background:#cfe3f5}.tag.rapport{background:#e0d4f5}.tag.resolue{background:#c9ebd8}.tag.nonresolue{background:#f6cbc7}
+.card.nouvelle{border-left-color:var(--amber)}.card.resolue{border-left-color:var(--green)}.card.nonresolue{border-left-color:var(--red)}
+img{max-width:100%;border-radius:6px;margin-top:6px}
+.rap,.as{background:#f4f7f9;border-radius:6px;padding:10px;margin-top:8px}
+.as label{display:block;padding:4px 0}.as input{width:auto;margin:0 8px 0 0}
+.file{display:block;border:1px dashed var(--blue);border-radius:6px;padding:10px;margin:5px 0;color:var(--blue);font-weight:600}
+.file input{border:0;padding:6px 0 0;margin:0}
+nav{display:flex;background:#fff;border-bottom:1px solid var(--line)}
+.tab{flex:1;background:transparent;color:var(--ink);border-radius:0;margin:0;border-bottom:3px solid transparent}
+.tab.on{border-bottom-color:var(--amber)}
+small,.muted{color:#5a6a78}
+#err{display:none;position:fixed;left:10px;right:10px;bottom:calc(10px + env(safe-area-inset-bottom));background:var(--red);color:#fff;padding:12px;border-radius:6px;z-index:9}
+</style>
+</head>
+<body>
+<div id="err"></div>
+<div id="app"><div class="box"><h1>Socadel</h1><p>Chargement…</p></div></div>
 <script type="module">
-import{initializeApp}from"https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
-import{getAuth,onAuthStateChanged,signInAnonymously,signInWithEmailAndPassword,createUserWithEmailAndPassword,signOut}from"https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
-import{getFirestore,doc,collection,query,where,onSnapshot,runTransaction,setDoc,updateDoc}from"https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-const firebaseConfig = { 
-  Clé API : "AIzaSyBquMhbt_wXRNpwwDU8QR48nCvpdYGhdkc" , 
-  authDomain : "mpb-socadel.firebaseapp.com" , 
-  projectId : "mpb-socadel" , 
-  storageBucket : "mpb-socadel.firebasestorage.app" , 
-  messagingSenderId : "900629291830" , 
-  ID d'application : "1:900629291830:web:7c6ba1c3e4732d67de0997" 
+/* ====== COLLE ICI TA CONFIGURATION FIREBASE (Paramètres du projet > Vos applications > Configuration) ====== */
+const FIREBASE_CONFIG = {
+  apiKey: "COLLE_TA_CLE_ICI",
+  authDomain: "mpb-socadel.firebaseapp.com",
+  projectId: "mpb-socadel",
+  storageBucket: "",
+  messagingSenderId: "",
+  appId: ""
+};
+/* ============================================================================================================ */
+
+const $ = s => document.querySelector(s);
+const app = $("#app");
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+let errTimer;
+const showErr = m => { const e = $("#err"); e.textContent = m; e.style.display = "block"; clearTimeout(errTimer); errTimer = setTimeout(() => e.style.display = "none", 8000); };
+const MSG = {
+  "auth/invalid-credential":"Email ou mot de passe incorrect.",
+  "auth/invalid-email":"Adresse email invalide.",
+  "auth/email-already-in-use":"Cet email a déjà un compte. Utilise Connexion.",
+  "auth/weak-password":"Mot de passe trop court (6 caractères minimum).",
+  "auth/operation-not-allowed":"Ce mode de connexion n'est pas activé dans Firebase (Authentication).",
+  "auth/unauthorized-domain":"Domaine non autorisé : ajoute dupoil54.github.io dans Firebase > Authentication > Settings > Authorized domains.",
+  "auth/network-request-failed":"Pas de connexion internet.",
+  "permission-denied":"Accès refusé par les règles de sécurité Firestore."
+};
+const err = x => { console.error(x); showErr(MSG[x?.code] || x?.code || x?.message || String(x)); };
+addEventListener("error", e => showErr("Erreur : " + e.message));
+addEventListener("unhandledrejection", e => err(e.reason));
+
+if (FIREBASE_CONFIG.apiKey.startsWith("COLLE")) {
+  app.innerHTML = '<div class="box"><h1>Configuration manquante</h1><p>Ouvre le fichier index.html et remplace le bloc FIREBASE_CONFIG par la configuration de ton projet Firebase.</p></div>';
+  throw new Error("Configuration Firebase manquante");
+}
+
+let AppM, AuM, FsM;
+try {
+  const B = "https://www.gstatic.com/firebasejs/10.12.2/";
+  [AppM, AuM, FsM] = await Promise.all([import(B + "firebase-app.js"), import(B + "firebase-auth.js"), import(B + "firebase-firestore.js")]);
+} catch (e) {
+  app.innerHTML = '<div class="box"><h1>Connexion impossible</h1><p>Le service Firebase ne se charge pas. Vérifie ta connexion internet puis recharge la page.</p></div>';
+  throw e;
+}
+const { getAuth, onAuthStateChanged, signInAnonymously, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } = AuM;
+const { getFirestore, doc, getDoc, setDoc, updateDoc, collection, query, where, onSnapshot, runTransaction } = FsM;
+const fb = AppM.initializeApp(FIREBASE_CONFIG);
+const auth = getAuth(fb), db = getFirestore(fb);
+
+let me = null, prof = null, unsubs = [], geo = null;
+const clear = () => { unsubs.forEach(f => f()); unsubs = []; };
+const ST = { nouvelle:"Nouvelle", assignee:"Assignée", rapport:"Rapport reçu", resolue:"Résolue", nonresolue:"Non résolue" };
+const hdr = t => `<header><b>Socadel</b><span>${t}</span><button data-a="out">Déconnexion</button></header>`;
+const fmt = d => d ? new Date(d).toLocaleString("fr-FR", { dateStyle:"short", timeStyle:"short" }) : "";
+
+function photo(file, max = 800, q = .6) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => {
+      const i = new Image();
+      i.onload = () => {
+        const k = Math.min(1, max / Math.max(i.width, i.height));
+        const c = document.createElement("canvas");
+        c.width = Math.round(i.width * k); c.height = Math.round(i.height * k);
+        c.getContext("2d").drawImage(i, 0, 0, c.width, c.height);
+        res(c.toDataURL("image/jpeg", q));
+      };
+      i.onerror = () => rej(new Error("Photo illisible"));
+      i.src = r.result;
+    };
+    r.onerror = () => rej(new Error("Photo illisible"));
+    r.readAsDataURL(file);
+  });
+}
+
+const watch = (q, fn) => unsubs.push(onSnapshot(q,
+  s => fn(s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.numero - a.numero)),
+  err));
+
+const card = (p, extra = "") => `<div class="card ${p.statut}">
+<div class="top"><b>Plainte n° ${p.numero}</b><span class="tag ${p.statut}">${ST[p.statut] || p.statut}</span></div>
+<small>${fmt(p.date)}</small>
+<p><b>${esc(p.nom)}</b> – <a href="tel:${esc(p.tel)}">${esc(p.tel)}</a><br>Quartier : ${esc(p.quartier)}${p.geo ? ` – <a target="_blank" rel="noopener" href="https://www.google.com/maps?q=${p.geo.lat},${p.geo.lng}">Voir sur la carte</a>` : ""}</p>
+<p>${esc(p.description)}</p>${p.photo ? `<img src="${p.photo}" alt="Photo de la panne">` : ""}
+${p.rapport ? `<div class="rap"><b>Rapport après travaux</b><br><small>${fmt(p.rapport.date)}</small><p>${esc(p.rapport.texte)}</p>${p.rapport.photo ? `<img src="${p.rapport.photo}" alt="Photo après travaux">` : ""}</div>` : ""}
+${p.equipe?.length ? `<small>Équipe : ${p.equipe.map(esc).join(", ")}</small>` : ""}
+${extra}</div>`;
+
+const empty = t => `<p class="muted">${t}</p>`;
+
+/* ---------- Connexion ---------- */
+function loginView() {
+  clear();
+  app.innerHTML = `<div class="box"><h1>Socadel</h1><p>Signalement de pannes et de situations dangereuses</p>
+<button class="big" data-a="client">Déclarer une panne</button>
+<h2>Espace Socadel</h2>
+<input id="em" type="email" placeholder="Email" autocomplete="username">
+<input id="pw" type="password" placeholder="Mot de passe (6 caractères minimum)" autocomplete="current-password">
+<select id="rl"><option value="chef">Chef de base</option><option value="tech">Technicien</option><option value="sup">Supérieur hiérarchique</option></select>
+<small>Le rôle sert uniquement à créer un compte.</small>
+<div class="row"><button data-a="login">Connexion</button><button class="alt" data-a="signup">Créer un compte</button></div></div>`;
+}
+
+/* ---------- Client ---------- */
+function clientView() {
+  let sv = {}; try { sv = JSON.parse(localStorage.getItem("socadel_client") || "{}"); } catch {}
+  app.innerHTML = hdr("Client") + `<main><form class="card" data-s="decl"><h2 style="margin-top:0">Déclarer une panne</h2>
+<input name="nom" placeholder="Votre nom" required value="${esc(sv.nom)}">
+<input name="tel" type="tel" placeholder="Numéro de téléphone" required value="${esc(sv.tel)}">
+<input name="quartier" placeholder="Quartier" required value="${esc(sv.quartier)}">
+<textarea name="description" placeholder="Décrivez la panne ou le danger" required></textarea>
+<label class="file">Photo de la panne<input name="photo" type="file" accept="image/*"></label>
+<button type="button" class="alt" data-a="geo">Ajouter ma position</button>
+<button style="width:100%">Envoyer la plainte</button></form>
+<h2>Mes plaintes</h2><div id="list">${empty("Chargement…")}</div></main>`;
+  watch(query(collection(db, "plaintes"), where("clientUid", "==", me.uid)), l => {
+    $("#list").innerHTML = l.length ? l.map(p => card(p, p.statut === "rapport"
+      ? `<div class="as"><b>Le problème est-il réglé ?</b><div class="row"><button data-a="conf" data-id="${p.id}" data-v="resolue">Résolu</button><button class="alt" data-a="conf" data-id="${p.id}" data-v="nonresolue">Pas résolu</button></div></div>` : "")).join("")
+      : empty("Aucune plainte pour le moment.");
+  });
+}
+
+/* ---------- Chef de base ---------- */
+function chefView() {
+  app.innerHTML = hdr("Chef de base") + `<nav><button class="tab on" data-a="tab" data-t="p">Plaintes</button><button class="tab" data-a="tab" data-t="pr">Profil et équipe</button></nav><main id="main"></main>`;
+  chefPlaintes();
+}
+function chefPlaintes() {
+  clear();
+  $("#main").innerHTML = empty("Chargement…");
+  watch(collection(db, "plaintes"), l => {
+    const techs = prof.techniciens || [];
+    $("#main").innerHTML = l.length ? l.map(p => card(p, ["nouvelle", "assignee", "nonresolue"].includes(p.statut)
+      ? `<div class="as"><b>Assigner une équipe (2 techniciens minimum)</b>${techs.length ? techs.map(t => `<label><input type="checkbox" value="${esc(t.email)}"${p.equipe?.includes(t.email) ? " checked" : ""}>${esc(t.nom)} (${esc(t.matricule)})</label>`).join("") + `<button data-a="assign" data-id="${p.id}">Assigner</button>` : empty("Ajoute d'abord tes techniciens dans « Profil et équipe ».")}</div>` : "")).join("")
+      : empty("Aucune plainte reçue.");
+  });
+}
+function chefProfil() {
+  clear();
+  const techs = prof.techniciens || [];
+  $("#main").innerHTML = `<form class="card" data-s="prof"><h2 style="margin-top:0">Mon profil</h2>
+<input name="nom" placeholder="Nom" required value="${esc(prof.nom)}">
+<input name="matricule" placeholder="Matricule" required value="${esc(prof.matricule)}">
+<input name="email" type="email" placeholder="Email" required value="${esc(prof.email || me.email)}">
+<input name="base" placeholder="Nom de la base technique" required value="${esc(prof.base)}">
+<input name="superieurEmail" type="email" placeholder="Email de mon supérieur hiérarchique" required value="${esc(prof.superieurEmail)}">
+<button style="width:100%">Enregistrer</button></form>
+<h2>Mes techniciens</h2>
+${techs.map((t, i) => `<div class="card top"><span><b>${esc(t.nom)}</b> (${esc(t.matricule)})<br><small>${esc(t.email)}</small></span><button class="alt" data-a="rmt" data-i="${i}">Retirer</button></div>`).join("") || empty("Aucun technicien.")}
+<form class="card" data-s="tech"><b>Ajouter un technicien</b>
+<input name="nom" placeholder="Nom" required><input name="matricule" placeholder="Matricule" required><input name="email" type="email" placeholder="Email (celui de son compte)" required>
+<button style="width:100%">Ajouter</button></form>
+<button class="alt" data-a="reset" style="width:100%">Je suis remplacé : effacer toutes les infos</button>`;
+}
+
+/* ---------- Technicien ---------- */
+function techView() {
+  app.innerHTML = hdr("Technicien") + `<main><h2>Plaintes qui me sont assignées</h2><div id="list">${empty("Chargement…")}</div></main>`;
+  watch(query(collection(db, "plaintes"), where("techEmails", "array-contains", (prof.email || me.email).toLowerCase())), l => {
+    $("#list").innerHTML = l.length ? l.map(p => card(p, p.statut === "assignee"
+      ? `<form class="as" data-s="rapport" data-id="${p.id}"><b>Rapport après travaux</b>
+<textarea name="texte" placeholder="Travaux effectués" required></textarea>
+<label class="file">Photo après travaux<input name="photo" type="file" accept="image/*"></label>
+<button style="width:100%">Envoyer le rapport</button></form>` : "")).join("")
+      : empty("Aucune plainte assignée pour le moment.");
+  });
+}
+
+/* ---------- Supérieur hiérarchique ---------- */
+function supView() {
+  app.innerHTML = hdr("Supérieur") + `<main><h2>Suivi des plaintes de mes bases</h2><div id="list">${empty("Chargement…")}</div></main>`;
+  watch(query(collection(db, "plaintes"), where("superieurEmail", "==", (prof.email || me.email).toLowerCase())), l => {
+    $("#list").innerHTML = l.length ? l.map(p => card(p)).join("") : empty("Aucune plainte à suivre pour le moment.");
+  });
+}
+
+/* ---------- Actions (boutons) ---------- */
+const A = {
+  out: () => signOut(auth),
+  client: () => signInAnonymously(auth),
+  login: () => signInWithEmailAndPassword(auth, $("#em").value.trim(), $("#pw").value),
+  signup: async () => {
+    const em = $("#em").value.trim();
+    const cr = await createUserWithEmailAndPassword(auth, em, $("#pw").value);
+    await setDoc(doc(db, "users", cr.user.uid), { role: $("#rl").value, email: em.toLowerCase(), nom: "", matricule: "", base: "", superieurEmail: "", techniciens: [] });
+  },
+  geo: el => {
+    if (!navigator.geolocation) return showErr("La position n'est pas disponible sur cet appareil.");
+    el.textContent = "Recherche de la position…";
+    navigator.geolocation.getCurrentPosition(
+      p => { geo = { lat: p.coords.latitude, lng: p.coords.longitude }; el.textContent = "Position ajoutée ✓"; },
+      () => { el.textContent = "Ajouter ma position"; showErr("Position refusée ou indisponible."); },
+      { enableHighAccuracy: true, timeout: 15000 });
+  },
+  conf: el => updateDoc(doc(db, "plaintes", el.dataset.id), { statut: el.dataset.v, confirmeLe: new Date().toISOString() }),
+  tab: el => {
+    document.querySelectorAll(".tab").forEach(b => b.classList.toggle("on", b === el));
+    el.dataset.t === "p" ? chefPlaintes() : chefProfil();
+  },
+  assign: el => {
+    const em = [...el.closest(".as").querySelectorAll("input:checked")].map(i => i.value);
+    if (em.length < 2) return showErr("Choisis au moins 2 techniciens.");
+    return updateDoc(doc(db, "plaintes", el.dataset.id), {
+      equipe: em, techEmails: em.map(x => x.toLowerCase()), statut: "assignee", rapport: null,
+      chefEmail: prof.email || me.email, superieurEmail: (prof.superieurEmail || "").toLowerCase()
+    });
+  },
+  rmt: async el => {
+    const techniciens = (prof.techniciens || []).filter((_, i) => i !== +el.dataset.i);
+    await updateDoc(doc(db, "users", me.uid), { techniciens }); prof.techniciens = techniciens; chefProfil();
+  },
+  reset: async () => {
+    if (!confirm("Effacer le nom, matricule, base, supérieur et techniciens ?")) return;
+    const v = { nom: "", matricule: "", base: "", superieurEmail: "", techniciens: [] };
+    await updateDoc(doc(db, "users", me.uid), v); Object.assign(prof, v); chefProfil();
+  }
 };
 
-const au=getAuth(app),fs=getFirestore(app);
-const $=s=>document.querySelector(s),v=id=>($("#"+id)||{}).value||"";
-const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-const im=s=>typeof s==="string"&&s.startsWith("data:image/")?`<img src="${s}" alt="photo">`:"";
-const SL={nouvelle:"Nouvelle",assignee:"Assignée",rapport:"Rapport reçu",resolue:"Résolue ✓",non_resolue:"Non résolue ✗"};
-let user=null,cfg,pl=[],ph={},busy=false,staff=false,u1=()=>{},u2=()=>{},pk="",me={};
-try{me=JSON.parse(localStorage.getItem("sm")||"{}")}catch(e){}
-const U=()=>(user&&user.email||"").toLowerCase();
-function role(){if(!user||user.isAnonymous)return"client";if(cfg===undefined)return"load";if(!cfg.chefEmail)return"setup";const e=U();return e===cfg.chefEmail?"chef":(cfg.techEmails||[]).includes(e)?"tech":e===cfg.supEmail?"sup":"none"}
-function msg(x){const t=$("#t");t.textContent=x;t.style.display="block";setTimeout(()=>t.style.display="none",4000)}
-function photo(f){return new Promise(r=>{if(!f)return r("");const fr=new FileReader;fr.onload=()=>{const i=new Image;i.onload=()=>{const k=Math.min(1,560/Math.max(i.width,i.height)),c=document.createElement("canvas");c.width=i.width*k;c.height=i.height*k;c.getContext("2d").drawImage(i,0,0,c.width,c.height);r(c.toDataURL("image/jpeg",.6))};i.onerror=()=>r("");i.src=fr.result};fr.onerror=()=>r("");fr.readAsDataURL(f)})}
-async function run(f){if(busy)return;busy=true;try{await f()}catch(e){msg("Échec : "+(e.code||"réessayez")+".")}busy=false}
-function card(p,x){const q=p.client||{};return `<div class="c"><b>N° ${esc(p.id)}</b> <span class="b ${esc(p.statut)}">${SL[p.statut]||""}</span>${p.danger?' <span class="b d">Danger</span>':""}<div class="m">${esc(q.nom)} · ${esc(q.tel)} · ${esc(q.quartier)}</div><p>${esc(p.desc)}</p>${im(p.photoAvant)}${p.rapport?`<div class="r"><b>Rapport du technicien</b><p>${esc(p.rapport.texte)}</p>${im(p.rapport.photo)}</div>`:""}${x||""}</div>`}
-const pick=k=>`<input type="file" accept="image/*" onchange="ph['${k}']=null;photo(this.files[0]).then(d=>ph['${k}']=d)">`;
-function client(){return `<div class="c"><h3>Signaler une panne</h3><input id="nom" placeholder="Votre nom" value="${esc(me.nom)}"><input id="tel" type="tel" placeholder="Numéro de téléphone" value="${esc(me.tel)}"><input id="qt" placeholder="Quartier" value="${esc(me.qt)}"><textarea id="ds" rows="3" placeholder="Description de la panne ou de la situation dangereuse"></textarea><label><input type="checkbox" id="dg">Situation dangereuse</label><div class="m">Photo de la panne</div>${pick("a")}<button onclick="sendP()">Envoyer</button></div>`+(pl.length?`<h3>Mes plaintes</h3>`+pl.map(p=>card(p,p.statut==="rapport"?`<div class="r"><b>Le problème est-il résolu ?</b><br><button class="g" onclick="conf('${p.id}',true)">Résolu</button><button class="k" onclick="conf('${p.id}',false)">Pas résolu</button></div>`:"")).join(""):"")}
-window.sendP=()=>run(async()=>{const q={nom:v("nom").trim(),tel:v("tel").trim(),quartier:v("qt").trim()},d=v("ds").trim();if(!q.nom||!q.tel||!q.quartier||!d)return msg("Remplissez tous les champs.");me={nom:q.nom,tel:q.tel,qt:q.quartier};try{localStorage.setItem("sm",JSON.stringify(me))}catch(e){}const dg=$("#dg").checked,pa=ph.a||"";const id=await runTransaction(fs,async t=>{const cr=doc(fs,"meta/counter"),s=await t.get(cr),n=(s.exists()?s.data().n:0)+1,id="P"+String(n).padStart(4,"0");t.set(cr,{n});t.set(doc(fs,"plaintes",id),{id,n,uid:user.uid,client:q,desc:d,danger:dg,photoAvant:pa,statut:"nouvelle",equipe:[],t:Date.now()});return id});ph={};msg("Plainte envoyée : N° "+id);render(1)});
-window.conf=(id,ok)=>run(async()=>{await updateDoc(doc(fs,"plaintes",id),{statut:ok?"resolue":"non_resolue",tc:Date.now()})});
-function chef(r){const c=cfg.chef||{},ts=cfg.techs||[],nm=e=>(ts.find(t=>t.email.toLowerCase()===e)||{}).nom||e,s=r==="setup";
- const news=pl.filter(p=>p.statut==="nouvelle"),cur=pl.filter(p=>p.statut==="assignee"||p.statut==="rapport"),end=pl.filter(p=>p.statut==="resolue"||p.statut==="non_resolue"),eq=p=>`<div class="m">Équipe : ${(p.equipe||[]).map(nm).map(esc).join(", ")}</div>`;
- return `<div class="c"><h3>Mon profil de chef de base</h3>${s?'<div class="m">Premier accès : enregistrez votre profil pour devenir chef de base.</div>':'<div class="m">Pour passer la main, remplacez ces infos par celles du remplaçant.</div>'}<input id="cn" placeholder="Nom" value="${esc(c.nom)}"><input id="cm" placeholder="Matricule" value="${esc(c.mat)}"><input id="ce" type="email" placeholder="Email" value="${esc(s?U():c.email)}" ${s?"readonly":""}><input id="cb" placeholder="Nom de la base technique" value="${esc(cfg.base)}"><input id="cs" type="email" placeholder="Email du supérieur hiérarchique" value="${esc(cfg.supEmail)}"><div class="m">Techniciens, un par ligne : nom, matricule, email</div><textarea id="ct" rows="4">${esc(ts.map(t=>[t.nom,t.mat,t.email].join(", ")).join("\n"))}</textarea><button onclick="saveC()">Enregistrer</bu
+/* ---------- Formulaires ---------- */
+const S = {
+  decl: async f => {
+    const d = Object.fromEntries(new FormData(f));
+    const file = f.photo.files[0];
+    const ph = file ? await photo(file) : "";
+    const cref = doc(db, "counters", "plaintes"), pref = doc(collection(db, "plaintes"));
+    let num;
+    await runTransaction(db, async t => {
+      const c = await t.get(cref);
+      num = (c.exists() ? c.data().n : 0) + 1;
+      t.set(cref, { n: num });
+      t.set(pref, { numero: num, clientUid: me.uid, nom: d.nom.trim(), tel: d.tel.trim(), quartier: d.quartier.trim(), description: d.description.trim(), photo: ph, geo, statut: "nouvelle", date: new Date().toISOString(), equipe: [], techEmails: [], superieurEmail: "", rapport: null });
+    });
+    try { localStorage.setItem("socadel_client", JSON.stringify({ nom: d.nom, tel: d.tel, quartier: d.quartier })); } catch {}
+    f.description.value = ""; f.photo.value = ""; geo = null;
+    alert("Plainte n° " + num + " envoyée. Garde ce numéro.");
+  },
+  prof: async f => {
+    const d = Object.fromEntries(new FormData(f));
+    const v = { nom: d.nom.trim(), matricule: d.matricule.trim(), email: d.email.trim().toLowerCase(), base: d.base.trim(), superieurEmail: d.superieurEmail.trim().toLowerCase() };
+    await updateDoc(doc(db, "users", me.uid), v); Object.assign(prof, v); showErr("Profil enregistré ✓");
+  },
+  tech: async f => {
+    const d = Object.fromEntries(new FormData(f));
+    const techniciens = [...(prof.techniciens || []), { nom: d.nom.trim(), matricule: d.matricule.trim(), email: d.email.trim().toLowerCase() }];
+    await updateDoc(doc(db, "users", me.uid), { techniciens }); prof.techniciens = techniciens; chefProfil();
+  },
+  rapport: async f => {
+    const file = f.photo.files[0];
+    const ph = file ? await photo(file) : "";
+    await updateDoc(doc(db, "plaintes", f.dataset.id), { statut: "rapport", rapport: { texte: f.texte.value.trim(), photo: ph, date: new Date().toISOString(), par: me.email } });
+  }
+};
+
+app.addEventListener("click", async e => {
+  const el = e.target.closest("[data-a]");
+  if (!el) return;
+  try { await A[el.dataset.a](el); } catch (x) { err(x); }
+});
+app.addEventListener("submit", async e => {
+  e.preventDefault();
+  const f = e.target, b = f.querySelector("button:not([type=button])");
+  if (b) b.disabled = true;
+  try { await S[f.dataset.s](f); } catch (x) { err(x); }
+  if (b) b.disabled = false;
+});
+
+/* ---------- Démarrage ---------- */
+onAuthStateChanged(auth, async u => {
+  try {
+    clear(); me = u; prof = null;
+    if (!u) return loginView();
+    if (u.isAnonymous) { prof = { role: "client" }; return clientView(); }
+    let s = await getDoc(doc(db, "users", u.uid));
+    if (!s.exists()) { await new Promise(r => setTimeout(r, 1500)); s = await getDoc(doc(db, "users", u.uid)); }
+    if (!s.exists()) { showErr("Profil introuvable. Crée le compte à nouveau."); return signOut(auth); }
+    prof = s.data();
+    ({ chef: chefView, tech: techView, sup: supView }[prof.role] || loginView)();
+  } catch (x) { err(x); loginView(); }
+});
+</script>
+</body>
+</html>
