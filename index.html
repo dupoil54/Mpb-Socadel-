@@ -43,16 +43,14 @@ small,.muted{color:#5a6a78}
 <div id="err"></div>
 <div id="app"><div class="box"><h1>Socadel</h1><p>Chargement…</p></div></div>
 <script type="module">
-/* ====== COLLE ICI TA CONFIGURATION FIREBASE (Paramètres du projet > Vos applications > Configuration) ====== */
 const FIREBASE_CONFIG = {
-  apiKey: "COLLE_TA_CLE_ICI",
+  apiKey: "AIzaSyBquMhbt_wXRNpwwDU8QR48nCvpdYGhdkc",
   authDomain: "mpb-socadel.firebaseapp.com",
   projectId: "mpb-socadel",
-  storageBucket: "",
-  messagingSenderId: "",
-  appId: ""
+  storageBucket: "mpb-socadel.firebasestorage.app",
+  messagingSenderId: "900629291830",
+  appId: "1:900629291830:web:7c6ba1c3e4732d67de0997"
 };
-/* ============================================================================================================ */
 
 const $ = s => document.querySelector(s);
 const app = $("#app");
@@ -72,11 +70,6 @@ const MSG = {
 const err = x => { console.error(x); showErr(MSG[x?.code] || x?.code || x?.message || String(x)); };
 addEventListener("error", e => showErr("Erreur : " + e.message));
 addEventListener("unhandledrejection", e => err(e.reason));
-
-if (FIREBASE_CONFIG.apiKey.startsWith("COLLE")) {
-  app.innerHTML = '<div class="box"><h1>Configuration manquante</h1><p>Ouvre le fichier index.html et remplace le bloc FIREBASE_CONFIG par la configuration de ton projet Firebase.</p></div>';
-  throw new Error("Configuration Firebase manquante");
-}
 
 let AppM, AuM, FsM;
 try {
