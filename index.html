@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Socadel – Signalement de pannes</title>
+<style>
+:root{--bg:#f4f5f7;--cd:#fff;--tx:#1b1e22;--mu:#5f6873;--ac:#c2410c;--bd:#d9dde2;--ok:#15803d;--ko:#b91c1c;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#14161a;--cd:#1e2125;--tx:#eceef1;--mu:#9aa3ad;--ac:#ff8a4c;--bd:#343a41;--ok:#4ade80;--ko:#f87171}}
+:root[data-theme="dark"]{--bg:#14161a;--cd:#1e2125;--tx:#eceef1;--mu:#9aa3ad;--ac:#ff8a4c;--bd:#343a41;--ok:#4ade80;--ko:#f87171}
+html,body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:560px;margin:0 auto;padding:12px}h1{font-size:19px;margin:4px 0 10px}h3{margin:0 0 8px;font-size:17px}
+.c{background:var(--cd);border:1px solid var(--bd);border-radius:12px;padding:12px;margin-bottom:12px}
+input,textarea{width:100%;box-sizing:border-box;margin:4px 0;padding:10px;font:inherit;color:var(--tx);background:var(--bg);border:1px solid var(--bd);border-radius:8px}
+input[type=checkbox]{width:auto;margin-right:8px}
+button{font:inherit;font-weight:600;padding:11px 14px;border:0;border-radius:8px;background:var(--ac);color:#fff;margin:4px 4px 0 0}
+button.g{background:var(--ok)}button.k{background:var(--ko)}button.w{display:block;width:100%;margin:8px 0;padding:16px}
+.m{color:var(--mu);font-size:14px}.b{font-size:12px;font-weight:700;padding:2px 8px;border-radius:99px;border:1px solid var(--bd)}
+.b.d,.b.non_resolue{color:var(--ko);border-color:var(--ko)}.b.resolue{color:var(--ok)}
+img{max-width:100%;border-radius:8px;margin-top:6px}.r{border-top:1px dashed var(--bd);margin-top:8px;padding-top:6px}
+label{display:block;padding:4px 0}#t{position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));background:var(--tx);color:var(--bg);padding:10px;border-radius:8px;display:none}
+</style></head><body><main id="app"></main><div id="t"></div>
+<script type="module">
+import{initializeApp}from"https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+import{getAuth,onAuthStateChanged,signInAnonymously,signInWithEmailAndPassword,createUserWithEmailAndPassword,signOut}from"https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+import{getFirestore,doc,collection,query,where,onSnapshot,runTransaction,setDoc,updateDoc}from"https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+const app=initializeApp({apiKey:"AIzaSyBquMhbt_wXRNpwwDU8QR48nCvpdYGhdkc",authDomain:"mpb-socadel.firebaseapp.com",projectId:"mpb-socadel",storageBucket:"mpb-socadel.firebasestorage.app",messagingSenderId:"900629291830",appId:"1:900629291830:web:7c6ba1c3e4732d67de0997"});
+const au=getAuth(app),fs=getFirestore(app);
+const $=s=>document.querySelector(s),v=id=>($("#"+id)||{}).value||"";
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const im=s=>typeof s==="string"&&s.startsWith("data:image/")?`<img src="${s}" alt="photo">`:"";
+const SL={nouvelle:"Nouvelle",assignee:"Assignée",rapport:"Rapport reçu",resolue:"Résolue ✓",non_resolue:"Non résolue ✗"};
+let user=null,cfg,pl=[],ph={},busy=false,staff=false,u1=()=>{},u2=()=>{},pk="",me={};
+try{me=JSON.parse(localStorage.getItem("sm")||"{}")}catch(e){}
+const U=()=>(user&&user.email||"").toLowerCase();
+function role(){if(!user||user.isAnonymous)return"client";if(cfg===undefined)return"load";if(!cfg.chefEmail)return"setup";const e=U();return e===cfg.chefEmail?"chef":(cfg.techEmails||[]).includes(e)?"tech":e===cfg.supEmail?"sup":"none"}
+function msg(x){const t=$("#t");t.textContent=x;t.style.display="block";setTimeout(()=>t.style.display="none",4000)}
+function photo(f){return new Promise(r=>{if(!f)return r("");const fr=new FileReader;fr.onload=()=>{const i=new Image;i.onload=()=>{const k=Math.min(1,560/Math.max(i.width,i.height)),c=document.createElement("canvas");c.width=i.width*k;c.height=i.height*k;c.getContext("2d").drawImage(i,0,0,c.width,c.height);r(c.toDataURL("image/jpeg",.6))};i.onerror=()=>r("");i.src=fr.result};fr.onerror=()=>r("");fr.readAsDataURL(f)})}
+async function run(f){if(busy)return;busy=true;try{await f()}catch(e){msg("Échec : "+(e.code||"réessayez")+".")}busy=false}
+function card(p,x){const q=p.client||{};return `<div class="c"><b>N° ${esc(p.id)}</b> <span class="b ${esc(p.statut)}">${SL[p.statut]||""}</span>${p.danger?' <span class="b d">Danger</span>':""}<div class="m">${esc(q.nom)} · ${esc(q.tel)} · ${esc(q.quartier)}</div><p>${esc(p.desc)}</p>${im(p.photoAvant)}${p.rapport?`<div class="r"><b>Rapport du technicien</b><p>${esc(p.rapport.texte)}</p>${im(p.rapport.photo)}</div>`:""}${x||""}</div>`}
+const pick=k=>`<input type="file" accept="image/*" onchange="ph['${k}']=null;photo(this.files[0]).then(d=>ph['${k}']=d)">`;
+function client(){return `<div class="c"><h3>Signaler une panne</h3><input id="nom" placeholder="Votre nom" value="${esc(me.nom)}"><input id="tel" type="tel" placeholder="Numéro de téléphone" value="${esc(me.tel)}"><input id="qt" placeholder="Quartier" value="${esc(me.qt)}"><textarea id="ds" rows="3" placeholder="Description de la panne ou de la situation dangereuse"></textarea><label><input type="checkbox" id="dg">Situation dangereuse</label><div class="m">Photo de la panne</div>${pick("a")}<button onclick="sendP()">Envoyer</button></div>`+(pl.length?`<h3>Mes plaintes</h3>`+pl.map(p=>card(p,p.statut==="rapport"?`<div class="r"><b>Le problème est-il résolu ?</b><br><button class="g" onclick="conf('${p.id}',true)">Résolu</button><button class="k" onclick="conf('${p.id}',false)">Pas résolu</button></div>`:"")).join(""):"")}
+window.sendP=()=>run(async()=>{const q={nom:v("nom").trim(),tel:v("tel").trim(),quartier:v("qt").trim()},d=v("ds").trim();if(!q.nom||!q.tel||!q.quartier||!d)return msg("Remplissez tous les champs.");me={nom:q.nom,tel:q.tel,qt:q.quartier};try{localStorage.setItem("sm",JSON.stringify(me))}catch(e){}const dg=$("#dg").checked,pa=ph.a||"";const id=await runTransaction(fs,async t=>{const cr=doc(fs,"meta/counter"),s=await t.get(cr),n=(s.exists()?s.data().n:0)+1,id="P"+String(n).padStart(4,"0");t.set(cr,{n});t.set(doc(fs,"plaintes",id),{id,n,uid:user.uid,client:q,desc:d,danger:dg,photoAvant:pa,statut:"nouvelle",equipe:[],t:Date.now()});return id});ph={};msg("Plainte envoyée : N° "+id);render(1)});
+window.conf=(id,ok)=>run(async()=>{await updateDoc(doc(fs,"plaintes",id),{statut:ok?"resolue":"non_resolue",tc:Date.now()})});
+function chef(r){const c=cfg.chef||{},ts=cfg.techs||[],nm=e=>(ts.find(t=>t.email.toLowerCase()===e)||{}).nom||e,s=r==="setup";
+ const news=pl.filter(p=>p.statut==="nouvelle"),cur=pl.filter(p=>p.statut==="assignee"||p.statut==="rapport"),end=pl.filter(p=>p.statut==="resolue"||p.statut==="non_resolue"),eq=p=>`<div class="m">Équipe : ${(p.equipe||[]).map(nm).map(esc).join(", ")}</div>`;
+ return `<div class="c"><h3>Mon profil de chef de base</h3>${s?'<div class="m">Premier accès : enregistrez votre profil pour devenir chef de base.</div>':'<div class="m">Pour passer la main, remplacez ces infos par celles du remplaçant.</div>'}<input id="cn" placeholder="Nom" value="${esc(c.nom)}"><input id="cm" placeholder="Matricule" value="${esc(c.mat)}"><input id="ce" type="email" placeholder="Email" value="${esc(s?U():c.email)}" ${s?"readonly":""}><input id="cb" placeholder="Nom de la base technique" value="${esc(cfg.base)}"><input id="cs" type="email" placeholder="Email du supérieur hiérarchique" value="${esc(cfg.supEmail)}"><div class="m">Techniciens, un par ligne : nom, matricule, email</div><textarea id="ct" rows="4">${esc(ts.map(t=>[t.nom,t.mat,t.email].join(", ")).join("\n"))}</textarea><button onclick="saveC()">Enregistrer</bu
