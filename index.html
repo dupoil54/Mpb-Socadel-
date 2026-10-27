@@ -22,7 +22,15 @@ label{display:block;padding:4px 0}#t{position:fixed;left:12px;right:12px;bottom:
 import{initializeApp}from"https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import{getAuth,onAuthStateChanged,signInAnonymously,signInWithEmailAndPassword,createUserWithEmailAndPassword,signOut}from"https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import{getFirestore,doc,collection,query,where,onSnapshot,runTransaction,setDoc,updateDoc}from"https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-const app=initializeApp({apiKey:"AIzaSyBquMhbt_wXRNpwwDU8QR48nCvpdYGhdkc",authDomain:"mpb-socadel.firebaseapp.com",projectId:"mpb-socadel",storageBucket:"mpb-socadel.firebasestorage.app",messagingSenderId:"900629291830",appId:"1:900629291830:web:7c6ba1c3e4732d67de0997"});
+const firebaseConfig = { 
+  Clé API : "AIzaSyBquMhbt_wXRNpwwDU8QR48nCvpdYGhdkc" , 
+  authDomain : "mpb-socadel.firebaseapp.com" , 
+  projectId : "mpb-socadel" , 
+  storageBucket : "mpb-socadel.firebasestorage.app" , 
+  messagingSenderId : "900629291830" , 
+  ID d'application : "1:900629291830:web:7c6ba1c3e4732d67de0997" 
+};
+
 const au=getAuth(app),fs=getFirestore(app);
 const $=s=>document.querySelector(s),v=id=>($("#"+id)||{}).value||"";
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
