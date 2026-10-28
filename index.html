@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -13,6 +12,8 @@ body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 system-ui,-ap
 header{background:var(--blue);color:#fff;display:flex;align-items:center;gap:10px;padding:12px 14px;padding-top:calc(12px + env(safe-area-inset-top));border-bottom:4px solid var(--amber)}
 header b{font-size:18px}header span{flex:1;opacity:.8;font-size:14px}
 header button{background:transparent;border:1px solid #fff8;color:#fff;padding:6px 10px;font-size:13px}
+header span.badge{flex:none;opacity:1}
+.badge{background:var(--red);color:#fff;border-radius:10px;padding:0 6px;font-size:12px;margin-left:4px;display:none}
 main,.box{max-width:640px;margin:0 auto;padding:14px}
 .box{padding-top:calc(30px + env(safe-area-inset-top))}
 h1{margin:0 0 4px;font-size:28px}h2{font-size:18px;margin:18px 0 8px}
@@ -38,10 +39,18 @@ nav{display:flex;background:#fff;border-bottom:1px solid var(--line)}
 .tab.on{border-bottom-color:var(--amber)}
 small,.muted{color:#5a6a78}
 #err{display:none;position:fixed;left:10px;right:10px;bottom:calc(10px + env(safe-area-inset-bottom));background:var(--red);color:#fff;padding:12px;border-radius:6px;z-index:9}
+#toast{display:none;position:fixed;left:10px;right:10px;top:calc(10px + env(safe-area-inset-top));background:var(--blue);color:#fff;padding:12px;border-radius:6px;border-left:5px solid var(--amber);z-index:10;cursor:pointer}
+#np{display:none;position:fixed;inset:0;background:var(--bg);overflow:auto;z-index:8;padding-top:env(safe-area-inset-top)}
+.npbox{max-width:640px;margin:0 auto;padding:14px}
+.card.notif{border-left-color:var(--amber)}
+.kpi{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;text-align:center;margin:8px 0}
+.kpi div{background:#f4f7f9;border-radius:6px;padding:6px;font-size:12px}.kpi b{display:block;font-size:20px}
+.bar{height:8px;background:#e3e8ed;border-radius:4px;overflow:hidden;margin:4px 0}.bar i{display:block;height:100%;background:var(--green)}
 </style>
 </head>
 <body>
 <div id="err"></div>
+<div id="toast" data-a="notifs"></div>
 <div id="app"><div class="box"><h1>Socadel</h1><p>Chargement…</p></div></div>
 <script type="module">
 const FIREBASE_CONFIG = {
@@ -80,16 +89,18 @@ try {
   app.innerHTML = '<div class="box"><h1>Connexion impossible</h1><p>Le service Firebase ne se charge pas. Vérifie ta connexion internet puis recharge la page.</p></div>';
   throw e;
 }
-const { getAuth, onAuthStateChanged, signInAnonymously, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } = AuM;
-const { getFirestore, doc, getDoc, setDoc, updateDoc, collection, query, where, onSnapshot, runTransaction } = FsM;
+const { getAuth, onAuthStateChanged, signInAnonymously, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendEmailVerification, signOut } = AuM;
+const { getFirestore, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc, collection, query, where, onSnapshot, runTransaction } = FsM;
 const fb = AppM.initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(fb), db = getFirestore(fb);
 
-let me = null, prof = null, unsubs = [], geo = null;
+let me = null, prof = null, unsubs = [], geo = null, plist = [];
 const clear = () => { unsubs.forEach(f => f()); unsubs = []; };
 const ST = { nouvelle:"Nouvelle", assignee:"Assignée", rapport:"Rapport reçu", resolue:"Résolue", nonresolue:"Non résolue" };
-const hdr = t => `<header><b>Socadel</b><span>${t}</span><button data-a="out">Déconnexion</button></header>`;
+const hdr = t => `<header><b>Socadel</b><span>${t}</span><button data-a="notifs">🔔<span class="badge" id="nb"></span></button><button data-a="out">Déconnexion</button></header>`;
 const fmt = d => d ? new Date(d).toLocaleString("fr-FR", { dateStyle:"short", timeStyle:"short" }) : "";
+const zkey = s => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+const myMail = () => (me?.email || "").toLowerCase();
 
 const getSaved = () => { try { return JSON.parse(localStorage.getItem("socadel_ids") || "[]"); } catch { return []; } };
 const saveIds = a => { try { localStorage.setItem("socadel_ids", JSON.stringify([...new Set(a)])); } catch {} };
@@ -120,12 +131,67 @@ const watch = (q, fn) => unsubs.push(onSnapshot(q,
   s => fn(s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.numero - a.numero)),
   err));
 
+/* ---------- Zones ---------- */
+async function loadZones() {
+  const s = await getDocs(collection(db, "zones"));
+  return s.docs.map(d => ({ key: d.id, nom: d.data().nom })).sort((a, b) => a.nom.localeCompare(b.nom));
+}
+
+/* ---------- Notifications ---------- */
+let nsubs = [], NT = new Map(), seen = new Set(), seenKey = "", toastTimer;
+const loadSeen = () => { try { seen = new Set(JSON.parse(localStorage.getItem(seenKey) || "[]")); } catch { seen = new Set(); } };
+const unread = () => [...NT.keys()].filter(id => !seen.has(id)).length;
+function updBadge() { const b = $("#nb"); if (!b) return; const u = unread(); b.textContent = u; b.style.display = u ? "inline-block" : "none"; }
+function stopN() { nsubs.forEach(f => f()); nsubs = []; NT = new Map(); updBadge(); }
+function toast(n) {
+  const t = $("#toast"); t.textContent = "🔔 " + n.titre + " – " + n.texte; t.style.display = "block";
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.style.display = "none", 7000);
+  try { navigator.vibrate && navigator.vibrate(200); } catch {}
+}
+function startN() {
+  stopN();
+  if (!me || !prof) return;
+  seenKey = "socadel_seen_" + me.uid; loadSeen();
+  const C = collection(db, "notifications"), qs = [];
+  if (prof.role === "client") getSaved().slice(-25).forEach(id => qs.push(query(C, where("canal", "==", "client"), where("cible", "==", "plainte:" + id))));
+  else {
+    qs.push(query(C, where("cible", "==", "email:" + myMail())));
+    if (prof.role === "chef" && prof.zoneKey) qs.push(query(C, where("cible", "==", "zone:" + prof.zoneKey)));
+  }
+  qs.forEach(q => {
+    let first = true;
+    nsubs.push(onSnapshot(q, s => {
+      s.docChanges().forEach(c => {
+        if (c.type !== "added") return;
+        const n = { id: c.doc.id, ...c.doc.data() };
+        NT.set(n.id, n);
+        if (!first && !seen.has(n.id)) toast(n);
+      });
+      first = false; updBadge();
+    }, err));
+  });
+  updBadge();
+}
+function notifPanel() {
+  let p = $("#np");
+  if (!p) { p = document.createElement("div"); p.id = "np"; document.body.appendChild(p); }
+  const l = [...NT.values()].sort((a, b) => Date.parse(b.date) - Date.parse(a.date));
+  p.innerHTML = `<div class="npbox"><div class="top"><h2 style="margin:0">Notifications</h2><button class="alt" data-a="nclose">Fermer</button></div>` +
+    (l.length ? l.map(n => `<div class="card notif"><b>${esc(n.titre)}</b><br><small>${fmt(n.date)}</small><p>${esc(n.texte)}</p></div>`).join("") : empty("Aucune notification.")) + `</div>`;
+  p.style.display = "block"; $("#toast").style.display = "none";
+  NT.forEach((_, id) => seen.add(id));
+  try { localStorage.setItem(seenKey, JSON.stringify([...seen].slice(-400))); } catch {}
+  updBadge();
+}
+const notify = (canal, cible, p, titre, texte) =>
+  addDoc(collection(db, "notifications"), { canal, cible, titre, texte, plainteId: p.id, numero: p.numero, date: new Date().toISOString() }).catch(e => console.error("notif", e));
+
 const card = (p, extra = "") => {
   const r = p.rapport, apres = r && (r.photoApres || r.photo);
   return `<div class="card ${p.statut}">
 <div class="top"><b>Plainte n° ${p.numero}</b><span class="tag ${p.statut}">${ST[p.statut] || p.statut}</span></div>
 <small>${fmt(p.date)}</small>
-<p><b>${esc(p.nom)}</b> – <a href="tel:${esc(p.tel)}">${esc(p.tel)}</a><br>Quartier : ${esc(p.quartier)}${p.geo ? ` – <a target="_blank" rel="noopener" href="https://www.google.com/maps?q=${p.geo.lat},${p.geo.lng}">Voir sur la carte</a>` : ""}</p>
+<p><b>${esc(p.nom)}</b> – <a href="tel:${esc(p.tel)}">${esc(p.tel)}</a><br>${p.zone ? "Zone : " + esc(p.zone) + " – " : ""}Quartier : ${esc(p.quartier)}${p.geo ? ` – <a target="_blank" rel="noopener" href="https://www.google.com/maps?q=${p.geo.lat},${p.geo.lng}">Voir sur la carte</a>` : ""}</p>
 <p>${esc(p.description)}</p>${p.photo ? `<img src="${p.photo}" alt="Photo de la panne">` : ""}
 ${r ? `<div class="rap"><b>Rapport du technicien</b><br><small>${fmt(r.date)}</small><p>${esc(r.texte)}</p>${r.photoAvant ? `<small>Avant dépannage</small><img src="${r.photoAvant}" alt="Avant dépannage">` : ""}${apres ? `<br><small>Après dépannage</small><img src="${apres}" alt="Après dépannage">` : ""}</div>` : ""}
 ${p.equipe?.length ? `<small>Équipe : ${p.equipe.map(esc).join(", ")}</small>` : ""}
@@ -136,14 +202,14 @@ const empty = t => `<p class="muted">${t}</p>`;
 
 /* ---------- Connexion ---------- */
 function loginView() {
-  clear();
+  clear(); stopN();
   app.innerHTML = `<div class="box"><h1>Socadel</h1><p>Signalement de pannes et de situations dangereuses</p>
 <button class="big" data-a="client">Déclarer une panne</button>
 <h2>Espace Socadel</h2>
 <input id="em" type="email" placeholder="Email" autocomplete="username">
 <input id="pw" type="password" placeholder="Mot de passe (6 caractères minimum)" autocomplete="current-password">
 <select id="rl"><option value="chef">Chef de base</option><option value="tech">Technicien</option><option value="sup">Supérieur hiérarchique</option></select>
-<small>Le rôle sert uniquement à créer un compte.</small>
+<small>Le rôle sert uniquement à créer un compte. Chef de base et supérieur : adresse professionnelle @camlight.cm obligatoire. Un lien de confirmation est envoyé par email.</small>
 <div class="row"><button data-a="login">Connexion</button><button class="alt" data-a="signup">Créer un compte</button></div></div>`;
 }
 
@@ -153,6 +219,7 @@ function clientView() {
   app.innerHTML = hdr("Client") + `<main><form class="card" data-s="decl"><h2 style="margin-top:0">Déclarer une panne</h2>
 <input name="nom" placeholder="Votre nom" required value="${esc(sv.nom)}">
 <input name="tel" type="tel" placeholder="Numéro de téléphone" required value="${esc(sv.tel)}">
+<select name="zone" id="zsel" required><option value="">Chargement des zones…</option></select>
 <input name="quartier" placeholder="Quartier" required value="${esc(sv.quartier)}">
 <textarea name="description" placeholder="Décrivez la panne ou le danger" required></textarea>
 <label class="file">Photo de la panne<input name="photo" type="file" accept="image/*"></label>
@@ -161,7 +228,12 @@ function clientView() {
 <h2>Suivre une plainte</h2>
 <div class="card"><input id="code" placeholder="Code de suivi (ex. P12-K7M2Q4)" autocapitalize="characters"><button data-a="follow" style="width:100%">Suivre</button></div>
 <h2>Mes plaintes</h2><div id="list"></div></main>`;
-  track();
+  loadZones().then(z => {
+    const s = $("#zsel"); if (!s) return;
+    s.innerHTML = z.length ? `<option value="">Choisir ma zone</option>` + z.map(x => `<option value="${esc(x.key)}">${esc(x.nom)}</option>`).join("") : `<option value="">Aucune zone disponible pour le moment</option>`;
+    if (sv.zone) s.value = sv.zone;
+  }).catch(err);
+  track(); startN();
 }
 function track() {
   clear();
@@ -180,17 +252,19 @@ function track() {
 
 /* ---------- Chef de base ---------- */
 function chefView() {
-  app.innerHTML = hdr("Chef de base") + `<nav><button class="tab on" data-a="tab" data-t="p">Plaintes</button><button class="tab" data-a="tab" data-t="pr">Profil et équipe</button></nav><main id="main"></main>`;
-  chefPlaintes();
+  app.innerHTML = hdr("Chef de base") + `<nav><button class="tab on" data-a="tab" data-t="p">Plaintes</button><button class="tab" data-a="tab" data-t="pr">Profil et équipe</button><button class="tab" data-a="tab" data-t="st">Statistiques</button></nav><div id="tr" style="max-width:640px;margin:0 auto;padding:0 14px"></div><main id="main"></main>`;
+  chefPlaintes(); startN(); offerTransfer();
 }
 function chefPlaintes() {
   clear();
-  $("#main").innerHTML = empty("Chargement…");
-  watch(collection(db, "plaintes"), l => {
+  if (!prof.zoneKey) { $("#main").innerHTML = empty("Renseigne d'abord ta zone de compétence dans « Profil et équipe » pour voir les plaintes de ta région."); return; }
+  $("#main").innerHTML = `<p><small>Zone : <b>${esc(prof.zone)}</b></small></p>` + empty("Chargement…");
+  watch(query(collection(db, "plaintes"), where("zoneKey", "==", prof.zoneKey)), l => {
+    plist = l;
     const techs = prof.techniciens || [];
-    $("#main").innerHTML = l.length ? l.map(p => card(p, ["nouvelle", "assignee", "nonresolue"].includes(p.statut)
+    $("#main").innerHTML = `<p><small>Zone : <b>${esc(prof.zone)}</b></small></p>` + (l.length ? l.map(p => card(p, ["nouvelle", "assignee", "nonresolue"].includes(p.statut)
       ? `<div class="as"><b>Assigner une équipe (2 techniciens minimum)</b>${techs.length ? techs.map(t => `<label><input type="checkbox" value="${esc(t.email)}"${p.equipe?.includes(t.email) ? " checked" : ""}>${esc(t.nom)} (${esc(t.matricule)})</label>`).join("") + `<button data-a="assign" data-id="${p.id}">Assigner</button>` : empty("Ajoute d'abord tes techniciens dans « Profil et équipe ».")}</div>` : "")).join("")
-      : empty("Aucune plainte reçue.");
+      : empty("Aucune plainte reçue dans ta zone."));
   });
 }
 function chefProfil() {
@@ -201,6 +275,9 @@ function chefProfil() {
 <input name="matricule" placeholder="Matricule" required value="${esc(prof.matricule)}">
 <input name="email" type="email" placeholder="Email" required value="${esc(prof.email || me.email)}">
 <input name="base" placeholder="Nom de la base technique" required value="${esc(prof.base)}">
+<input name="zone" list="zl" placeholder="Ma zone de compétence (ville ou région)" required value="${esc(prof.zone)}">
+<datalist id="zl"></datalist>
+<small>Choisis une zone existante dans la liste ou écris la tienne. Les clients de cette zone te signaleront leurs pannes.</small>
 <input name="superieurEmail" type="email" placeholder="Email de mon supérieur hiérarchique" required value="${esc(prof.superieurEmail)}">
 <button style="width:100%">Enregistrer</button></form>
 <h2>Mes techniciens</h2>
@@ -208,13 +285,71 @@ ${techs.map((t, i) => `<div class="card top"><span><b>${esc(t.nom)}</b> (${esc(t
 <form class="card" data-s="tech"><b>Ajouter un technicien</b>
 <input name="nom" placeholder="Nom" required><input name="matricule" placeholder="Matricule" required><input name="email" type="email" placeholder="Email (celui de son compte)" required>
 <button style="width:100%">Ajouter</button></form>
-<button class="alt" data-a="reset" style="width:100%">Je suis remplacé : effacer toutes les infos</button>`;
+<form class="card" data-s="relais"><b>Passer le relais à mon remplaçant</b>
+<input name="email" type="email" placeholder="Email professionnel du remplaçant (@camlight.cm)" required>
+<small>Ta base, ta zone, le supérieur et tes techniciens lui sont transmis, puis effacés de ton compte. Il les reprend à sa première connexion.</small>
+<button style="width:100%">Passer le relais</button></form>
+<button class="alt" data-a="reset" style="width:100%">Je pars sans remplaçant : effacer mes infos</button>
+<button class="alt" data-a="role" data-r="sup" style="width:100%">Je suis promu : passer en Supérieur hiérarchique</button>`;
+  loadZones().then(z => { const d = $("#zl"); if (d) d.innerHTML = z.map(x => `<option value="${esc(x.nom)}">`).join(""); }).catch(() => {});
+}
+
+/* ---------- Relais entre chefs de base ---------- */
+async function offerTransfer() {
+  try {
+    const s = await getDoc(doc(db, "transferts", myMail()));
+    const t = $("#tr"); if (!s.exists() || !t) return;
+    const d = s.data();
+    t.innerHTML = `<div class="card nouvelle"><b>Relais proposé</b><p>${esc(d.deNom || "Le chef de base précédent")} te transmet la base <b>${esc(d.base || "—")}</b> (zone <b>${esc(d.zone)}</b>, ${(d.techniciens || []).length} technicien(s)).</p><button data-a="accept" style="width:100%">Reprendre la base</button></div>`;
+  } catch (e) { console.error(e); }
+}
+
+/* ---------- Statistiques ---------- */
+let statPer = "0", repText = "";
+const dur = ms => ms == null ? "—" : ms < 36e5 ? Math.round(ms / 6e4) + " min" : ms < 864e5 ? (ms / 36e5).toFixed(1) + " h" : (ms / 864e5).toFixed(1) + " j";
+function chefStats() {
+  clear();
+  if (!prof.zoneKey) { $("#main").innerHTML = empty("Renseigne d'abord ta zone dans « Profil et équipe »."); return; }
+  $("#main").innerHTML = empty("Chargement…");
+  watch(query(collection(db, "plaintes"), where("zoneKey", "==", prof.zoneKey)), l => { plist = l; drawStats(); });
+}
+function drawStats() {
+  const days = +statPer, lim = days ? Date.now() - days * 864e5 : 0;
+  const l = plist.filter(p => Date.parse(p.assigneLe || p.date) >= lim);
+  const n = st => l.filter(p => p.statut === st).length;
+  const rows = (prof.techniciens || []).map(t => {
+    const e = t.email.toLowerCase(), mine = l.filter(p => (p.techEmails || []).includes(e));
+    const done = mine.filter(p => ["rapport", "resolue", "nonresolue"].includes(p.statut));
+    const res = mine.filter(p => p.statut === "resolue").length, non = mine.filter(p => p.statut === "nonresolue").length;
+    const d = done.map(p => p.assigneLe && p.rapport?.date ? Date.parse(p.rapport.date) - Date.parse(p.assigneLe) : 0).filter(x => x > 0);
+    return { t, total: mine.length, enCours: mine.filter(p => p.statut === "assignee").length, done: done.length, res, non,
+      sent: mine.filter(p => (p.rapport?.par || "").toLowerCase() === e).length,
+      moy: d.length ? d.reduce((a, b) => a + b) / d.length : null, taux: res + non ? Math.round(100 * res / (res + non)) : null };
+  });
+  const lab = { "0": "toute la période", "30": "30 derniers jours", "7": "7 derniers jours" }[statPer];
+  repText = `Rapport – base ${prof.base || ""} (zone ${prof.zone}) – ${lab}\nPlaintes : ${l.length} (nouvelles ${n("nouvelle")}, en cours ${n("assignee")}, rapport reçu ${n("rapport")}, résolues ${n("resolue")}, non résolues ${n("nonresolue")})\n\n` +
+    rows.map(r => `${r.t.nom} (${r.t.matricule}) : ${r.total} assignées, ${r.done} traitées, ${r.res} résolues, ${r.non} non résolues, taux ${r.taux ?? "—"}${r.taux != null ? " %" : ""}, délai moyen ${dur(r.moy)}`).join("\n");
+  $("#main").innerHTML = `<select id="per"><option value="0"${statPer === "0" ? " selected" : ""}>Toute la période</option><option value="30"${statPer === "30" ? " selected" : ""}>30 derniers jours</option><option value="7"${statPer === "7" ? " selected" : ""}>7 derniers jours</option></select>
+<div class="card"><b>Ma zone : ${esc(prof.zone)}</b><div class="kpi"><div><b>${l.length}</b>Plaintes</div><div><b>${n("nouvelle")}</b>Nouvelles</div><div><b>${n("assignee")}</b>En cours</div><div><b>${n("rapport")}</b>Rapport reçu</div><div><b>${n("resolue")}</b>Résolues</div><div><b>${n("nonresolue")}</b>Non résolues</div></div></div>
+<h2>Par technicien</h2>` + (rows.length ? rows.map(r => `<div class="card"><b>${esc(r.t.nom)}</b> <small>(${esc(r.t.matricule)})</small>
+<div class="kpi"><div><b>${r.total}</b>Assignées</div><div><b>${r.done}</b>Traitées</div><div><b>${r.enCours}</b>En cours</div><div><b>${r.res}</b>Résolues</div><div><b>${r.non}</b>Non résolues</div><div><b>${r.sent}</b>Rapports envoyés</div></div>
+<small>Taux de résolution confirmé : <b>${r.taux ?? "—"}${r.taux != null ? " %" : ""}</b> · Délai moyen d'intervention : <b>${dur(r.moy)}</b></small><div class="bar"><i style="width:${r.taux || 0}%"></i></div></div>`).join("") : empty("Ajoute d'abord tes techniciens dans « Profil et équipe ».")) +
+    `<button data-a="share" style="width:100%">Partager le rapport</button><small>Une plainte compte pour chaque technicien de l'équipe assignée. Le délai se calcule de l'assignation au rapport.</small>`;
+}
+
+/* ---------- Vérification email ---------- */
+function verifyView() {
+  clear(); stopN();
+  app.innerHTML = `<div class="box"><h1>Vérifie ton email</h1><p>Un lien de confirmation a été envoyé à <b>${esc(me.email)}</b>. Ouvre-le (regarde aussi dans les spams), puis reviens ici.</p>
+<button data-a="verified" style="width:100%">J'ai confirmé mon email</button><button class="alt" data-a="resend" style="width:100%">Renvoyer le lien</button><button class="alt" data-a="out" style="width:100%">Déconnexion</button></div>`;
 }
 
 /* ---------- Technicien ---------- */
 function techView() {
   app.innerHTML = hdr("Technicien") + `<main><h2>Plaintes qui me sont assignées</h2><div id="list">${empty("Chargement…")}</div></main>`;
-  watch(query(collection(db, "plaintes"), where("techEmails", "array-contains", (prof.email || me.email).toLowerCase())), l => {
+  startN();
+  watch(query(collection(db, "plaintes"), where("techEmails", "array-contains", myMail())), l => {
+    plist = l;
     $("#list").innerHTML = l.length ? l.map(p => card(p, p.statut === "assignee"
       ? `<form class="as" data-s="rapport" data-id="${p.id}"><b>Rapport après travaux</b>
 <textarea name="texte" placeholder="Travaux effectués" required></textarea>
@@ -227,8 +362,9 @@ function techView() {
 
 /* ---------- Supérieur hiérarchique ---------- */
 function supView() {
-  app.innerHTML = hdr("Supérieur") + `<main><h2>Suivi des plaintes de mes bases</h2><div id="list">${empty("Chargement…")}</div></main>`;
-  watch(query(collection(db, "plaintes"), where("superieurEmail", "==", (prof.email || me.email).toLowerCase())), l => {
+  app.innerHTML = hdr("Supérieur") + `<main><h2>Suivi des plaintes de mes bases</h2><div id="list">${empty("Chargement…")}</div><button class="alt" data-a="role" data-r="chef" style="width:100%">Passer en Chef de base</button></main>`;
+  startN();
+  watch(query(collection(db, "plaintes"), where("superieurEmail", "==", myMail())), l => {
     $("#list").innerHTML = l.length ? l.map(p => card(p)).join("") : empty("Aucune plainte à suivre pour le moment.");
   });
 }
@@ -236,12 +372,26 @@ function supView() {
 /* ---------- Actions (boutons) ---------- */
 const A = {
   out: () => signOut(auth),
+  notifs: () => notifPanel(),
+  nclose: () => { $("#np").style.display = "none"; },
   client: () => signInAnonymously(auth),
   login: () => signInWithEmailAndPassword(auth, $("#em").value.trim(), $("#pw").value),
   signup: async () => {
-    const em = $("#em").value.trim();
+    const em = $("#em").value.trim(), role = $("#rl").value;
+    if (role !== "tech" && !em.toLowerCase().endsWith("@camlight.cm")) return showErr("Pour ce rôle, utilise ton adresse professionnelle @camlight.cm.");
     const cr = await createUserWithEmailAndPassword(auth, em, $("#pw").value);
-    await setDoc(doc(db, "users", cr.user.uid), { role: $("#rl").value, email: em.toLowerCase(), nom: "", matricule: "", base: "", superieurEmail: "", techniciens: [] });
+    await setDoc(doc(db, "users", cr.user.uid), { role, email: em.toLowerCase(), nom: "", matricule: "", base: "", zone: "", zoneKey: "", superieurEmail: "", techniciens: [] });
+    await sendEmailVerification(cr.user);
+  },
+  verified: async () => {
+    await me.reload(); await me.getIdToken(true);
+    if (!me.emailVerified) return showErr("Email pas encore confirmé. Ouvre le lien reçu, puis réessaie.");
+    await enter(me);
+  },
+  resend: async () => { await sendEmailVerification(me); showErr("Lien renvoyé ✓"); },
+  share: async () => {
+    if (navigator.share) { try { await navigator.share({ title: "Rapport statistiques techniciens", text: repText }); } catch {} }
+    else { await navigator.clipboard.writeText(repText); showErr("Rapport copié ✓"); }
   },
   geo: el => {
     if (!navigator.geolocation) return showErr("La position n'est pas disponible sur cet appareil.");
@@ -256,29 +406,55 @@ const A = {
     if (!id) return;
     const s = await getDoc(doc(db, "plaintes", id));
     if (!s.exists()) return showErr("Code introuvable. Vérifie-le.");
-    saveIds([...getSaved(), id]); $("#code").value = ""; track();
+    saveIds([...getSaved(), id]); $("#code").value = ""; track(); startN();
   },
-  conf: el => updateDoc(doc(db, "plaintes", el.dataset.id), { statut: el.dataset.v, confirmeLe: new Date().toISOString() }),
+  conf: async el => {
+    const id = el.dataset.id, v = el.dataset.v;
+    await updateDoc(doc(db, "plaintes", id), { statut: v, confirmeLe: new Date().toISOString() });
+    const s = await getDoc(doc(db, "plaintes", id)), p = { id, ...s.data() };
+    const t = "Plainte n° " + p.numero, x = "Le client déclare : " + (v === "resolue" ? "problème résolu." : "problème NON résolu.");
+    if (p.zoneKey) notify("staff", "zone:" + p.zoneKey, p, t + " – confirmation", x);
+    if (p.superieurEmail) notify("staff", "email:" + p.superieurEmail, p, t + " – confirmation", x);
+  },
   tab: el => {
     document.querySelectorAll(".tab").forEach(b => b.classList.toggle("on", b === el));
-    el.dataset.t === "p" ? chefPlaintes() : chefProfil();
+    ({ p: chefPlaintes, pr: chefProfil, st: chefStats })[el.dataset.t]();
   },
-  assign: el => {
+  assign: async el => {
     const em = [...el.closest(".as").querySelectorAll("input:checked")].map(i => i.value);
     if (em.length < 2) return showErr("Choisis au moins 2 techniciens.");
-    return updateDoc(doc(db, "plaintes", el.dataset.id), {
-      equipe: em, techEmails: em.map(x => x.toLowerCase()), statut: "assignee", rapport: null,
-      chefEmail: prof.email || me.email, superieurEmail: (prof.superieurEmail || "").toLowerCase()
+    const id = el.dataset.id, p = plist.find(x => x.id === id) || { id, numero: "?" };
+    await updateDoc(doc(db, "plaintes", id), {
+      equipe: em, techEmails: em.map(x => x.toLowerCase()), statut: "assignee", rapport: null, assigneLe: new Date().toISOString(),
+      chefEmail: myMail(), superieurEmail: (prof.superieurEmail || "").toLowerCase()
     });
+    em.forEach(x => notify("staff", "email:" + x.toLowerCase(), p, "Nouvelle intervention", "Plainte n° " + p.numero + " – quartier " + (p.quartier || "") + ". Ouvre l'application pour les détails."));
+    notify("staff", "email:" + myMail(), p, "Équipe assignée", "Plainte n° " + p.numero + " assignée à " + em.join(", ") + ".");
+  },
+  role: async el => {
+    const r = el.dataset.r;
+    if (!confirm("Passer en " + (r === "sup" ? "Supérieur hiérarchique" : "Chef de base") + " ?")) return;
+    await updateDoc(doc(db, "users", me.uid), { role: r });
+    await enter(me);
+  },
+  accept: async () => {
+    const s = await getDoc(doc(db, "transferts", myMail()));
+    if (!s.exists()) return showErr("Aucun relais en attente.");
+    const t = s.data();
+    const v = { base: t.base || "", zone: t.zone, zoneKey: t.zoneKey, superieurEmail: t.superieurEmail || "", techniciens: t.techniciens || [] };
+    await updateDoc(doc(db, "users", me.uid), v); Object.assign(prof, v);
+    await deleteDoc(doc(db, "transferts", myMail()));
+    showErr("Base reprise ✓ Complète ton nom et ton matricule dans « Profil et équipe ».");
+    chefView();
   },
   rmt: async el => {
     const techniciens = (prof.techniciens || []).filter((_, i) => i !== +el.dataset.i);
     await updateDoc(doc(db, "users", me.uid), { techniciens }); prof.techniciens = techniciens; chefProfil();
   },
   reset: async () => {
-    if (!confirm("Effacer le nom, matricule, base, supérieur et techniciens ?")) return;
-    const v = { nom: "", matricule: "", base: "", superieurEmail: "", techniciens: [] };
-    await updateDoc(doc(db, "users", me.uid), v); Object.assign(prof, v); chefProfil();
+    if (!confirm("Effacer le nom, matricule, base, zone, supérieur et techniciens ?")) return;
+    const v = { nom: "", matricule: "", base: "", zone: "", zoneKey: "", superieurEmail: "", techniciens: [] };
+    await updateDoc(doc(db, "users", me.uid), v); Object.assign(prof, v); chefProfil(); startN();
   }
 };
 
@@ -286,6 +462,8 @@ const A = {
 const S = {
   decl: async f => {
     const d = Object.fromEntries(new FormData(f));
+    if (!d.zone) throw new Error("Choisis ta zone.");
+    const zoneNom = f.zone.selectedOptions[0].text;
     const file = f.photo.files[0];
     const ph = file ? await photo(file) : "";
     const cref = doc(db, "counters", "plaintes"), code = newCode();
@@ -295,31 +473,50 @@ const S = {
       num = (c.exists() ? c.data().n : 0) + 1;
       pid = "P" + num + "-" + code;
       t.set(cref, { n: num });
-      t.set(doc(db, "plaintes", pid), { numero: num, clientUid: me.uid, nom: d.nom.trim(), tel: d.tel.trim(), quartier: d.quartier.trim(), description: d.description.trim(), photo: ph, geo, statut: "nouvelle", date: new Date().toISOString(), equipe: [], techEmails: [], superieurEmail: "", rapport: null });
+      t.set(doc(db, "plaintes", pid), { numero: num, clientUid: me.uid, nom: d.nom.trim(), tel: d.tel.trim(), zone: zoneNom, zoneKey: d.zone, quartier: d.quartier.trim(), description: d.description.trim(), photo: ph, geo, statut: "nouvelle", date: new Date().toISOString(), equipe: [], techEmails: [], superieurEmail: "", rapport: null });
     });
-    try { localStorage.setItem("socadel_client", JSON.stringify({ nom: d.nom, tel: d.tel, quartier: d.quartier })); } catch {}
+    notify("staff", "zone:" + d.zone, { id: pid, numero: num }, "Nouvelle panne n° " + num, d.quartier.trim() + " – " + d.description.trim().slice(0, 80));
+    try { localStorage.setItem("socadel_client", JSON.stringify({ nom: d.nom, tel: d.tel, quartier: d.quartier, zone: d.zone })); } catch {}
     saveIds([...getSaved(), pid]);
     f.description.value = ""; f.photo.value = ""; geo = null;
-    track();
+    track(); startN();
     alert("Plainte n° " + num + " envoyée.\nCode de suivi : " + pid + "\nGarde ce code.");
   },
   prof: async f => {
     const d = Object.fromEntries(new FormData(f));
-    const v = { nom: d.nom.trim(), matricule: d.matricule.trim(), email: d.email.trim().toLowerCase(), base: d.base.trim(), superieurEmail: d.superieurEmail.trim().toLowerCase() };
-    await updateDoc(doc(db, "users", me.uid), v); Object.assign(prof, v); showErr("Profil enregistré ✓");
+    const zone = d.zone.trim(), zk = zkey(zone);
+    if (!zk) throw new Error("Zone invalide.");
+    const v = { nom: d.nom.trim(), matricule: d.matricule.trim(), email: d.email.trim().toLowerCase(), base: d.base.trim(), zone, zoneKey: zk, superieurEmail: d.superieurEmail.trim().toLowerCase() };
+    await setDoc(doc(db, "zones", zk), { nom: zone });
+    await updateDoc(doc(db, "users", me.uid), v); Object.assign(prof, v); startN(); showErr("Profil enregistré ✓");
   },
   tech: async f => {
     const d = Object.fromEntries(new FormData(f));
     const techniciens = [...(prof.techniciens || []), { nom: d.nom.trim(), matricule: d.matricule.trim(), email: d.email.trim().toLowerCase() }];
     await updateDoc(doc(db, "users", me.uid), { techniciens }); prof.techniciens = techniciens; chefProfil();
   },
+  relais: async f => {
+    const em = f.email.value.trim().toLowerCase();
+    if (!em.endsWith("@camlight.cm")) throw new Error("L'adresse du remplaçant doit se terminer par @camlight.cm.");
+    if (em === myMail()) throw new Error("Entre l'adresse de ton remplaçant, pas la tienne.");
+    if (!prof.zoneKey) throw new Error("Renseigne d'abord ta zone avant de passer le relais.");
+    if (!confirm("Transmettre ta base à " + em + " ? Tes infos de chef seront effacées de ton compte.")) return;
+    await setDoc(doc(db, "transferts", em), { de: me.uid, deNom: prof.nom || "", base: prof.base || "", zone: prof.zone, zoneKey: prof.zoneKey, superieurEmail: prof.superieurEmail || "", techniciens: prof.techniciens || [], date: new Date().toISOString() });
+    const v = { nom: "", matricule: "", base: "", zone: "", zoneKey: "", superieurEmail: "", techniciens: [] };
+    await updateDoc(doc(db, "users", me.uid), v); Object.assign(prof, v); startN(); chefProfil();
+    showErr("Relais transmis à " + em + " ✓");
+  },
   rapport: async f => {
+    const id = f.dataset.id, p = plist.find(x => x.id === id) || { id, numero: "?" };
     const [avant, apres] = await Promise.all([photo(f.photoAvant.files[0]), photo(f.photoApres.files[0])]);
-    await updateDoc(doc(db, "plaintes", f.dataset.id), { statut: "rapport", rapport: { texte: f.texte.value.trim(), photoAvant: avant, photoApres: apres, date: new Date().toISOString(), par: me.email } });
+    await updateDoc(doc(db, "plaintes", id), { statut: "rapport", rapport: { texte: f.texte.value.trim(), photoAvant: avant, photoApres: apres, date: new Date().toISOString(), par: me.email } });
+    const t = "Rapport de la plainte n° " + p.numero;
+    notify("client", "plainte:" + id, p, t, "Le technicien a terminé. Ouvre ta plainte pour voir le rapport et confirmer si c'est résolu.");
+    if (p.zoneKey) notify("staff", "zone:" + p.zoneKey, p, t, "Le technicien a envoyé son rapport.");
   }
 };
 
-app.addEventListener("click", async e => {
+document.addEventListener("click", async e => {
   const el = e.target.closest("[data-a]");
   if (!el) return;
   try { await A[el.dataset.a](el); } catch (x) { err(x); }
@@ -332,19 +529,24 @@ app.addEventListener("submit", async e => {
   if (b) b.disabled = false;
 });
 
+document.addEventListener("change", e => { if (e.target.id === "per") { statPer = e.target.value; drawStats(); } });
+
 /* ---------- Démarrage ---------- */
-onAuthStateChanged(auth, async u => {
+async function enter(u) {
   try {
-    clear(); me = u; prof = null;
+    clear(); stopN(); $("#np") && ($("#np").style.display = "none");
+    me = u; prof = null;
     if (!u) return loginView();
     if (u.isAnonymous) { prof = { role: "client" }; return clientView(); }
+    if (!u.emailVerified) return verifyView();
     let s = await getDoc(doc(db, "users", u.uid));
     if (!s.exists()) { await new Promise(r => setTimeout(r, 1500)); s = await getDoc(doc(db, "users", u.uid)); }
     if (!s.exists()) { showErr("Profil introuvable. Crée le compte à nouveau."); return signOut(auth); }
     prof = s.data();
     ({ chef: chefView, tech: techView, sup: supView }[prof.role] || loginView)();
   } catch (x) { err(x); loginView(); }
-});
+}
+onAuthStateChanged(auth, enter);
 </script>
 </body>
 </html>
