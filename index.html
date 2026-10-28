@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -29,7 +30,7 @@ button:disabled{opacity:.5}
 .card.nouvelle{border-left-color:var(--amber)}.card.resolue{border-left-color:var(--green)}.card.nonresolue{border-left-color:var(--red)}
 img{max-width:100%;border-radius:6px;margin-top:6px}
 .rap,.as{background:#f4f7f9;border-radius:6px;padding:10px;margin-top:8px}
-.as label{display:block;padding:4px 0}.as input{width:auto;margin:0 8px 0 0}
+.as label{display:block;padding:4px 0}.as input[type=checkbox]{width:auto;margin:0 8px 0 0}
 .file{display:block;border:1px dashed var(--blue);border-radius:6px;padding:10px;margin:5px 0;color:var(--blue);font-weight:600}
 .file input{border:0;padding:6px 0 0;margin:0}
 nav{display:flex;background:#fff;border-bottom:1px solid var(--line)}
@@ -90,8 +91,13 @@ const ST = { nouvelle:"Nouvelle", assignee:"Assignée", rapport:"Rapport reçu",
 const hdr = t => `<header><b>Socadel</b><span>${t}</span><button data-a="out">Déconnexion</button></header>`;
 const fmt = d => d ? new Date(d).toLocaleString("fr-FR", { dateStyle:"short", timeStyle:"short" }) : "";
 
-function photo(file, max = 800, q = .6) {
+const getSaved = () => { try { return JSON.parse(localStorage.getItem("socadel_ids") || "[]"); } catch { return []; } };
+const saveIds = a => { try { localStorage.setItem("socadel_ids", JSON.stringify([...new Set(a)])); } catch {} };
+const newCode = () => { const c = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; return Array.from(crypto.getRandomValues(new Uint8Array(6)), b => c[b % c.length]).join(""); };
+
+function photo(file, max = 700, q = .6) {
   return new Promise((res, rej) => {
+    if (!file) return rej(new Error("Photo manquante"));
     const r = new FileReader();
     r.onload = () => {
       const i = new Image();
@@ -114,14 +120,17 @@ const watch = (q, fn) => unsubs.push(onSnapshot(q,
   s => fn(s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.numero - a.numero)),
   err));
 
-const card = (p, extra = "") => `<div class="card ${p.statut}">
+const card = (p, extra = "") => {
+  const r = p.rapport, apres = r && (r.photoApres || r.photo);
+  return `<div class="card ${p.statut}">
 <div class="top"><b>Plainte n° ${p.numero}</b><span class="tag ${p.statut}">${ST[p.statut] || p.statut}</span></div>
 <small>${fmt(p.date)}</small>
 <p><b>${esc(p.nom)}</b> – <a href="tel:${esc(p.tel)}">${esc(p.tel)}</a><br>Quartier : ${esc(p.quartier)}${p.geo ? ` – <a target="_blank" rel="noopener" href="https://www.google.com/maps?q=${p.geo.lat},${p.geo.lng}">Voir sur la carte</a>` : ""}</p>
 <p>${esc(p.description)}</p>${p.photo ? `<img src="${p.photo}" alt="Photo de la panne">` : ""}
-${p.rapport ? `<div class="rap"><b>Rapport après travaux</b><br><small>${fmt(p.rapport.date)}</small><p>${esc(p.rapport.texte)}</p>${p.rapport.photo ? `<img src="${p.rapport.photo}" alt="Photo après travaux">` : ""}</div>` : ""}
+${r ? `<div class="rap"><b>Rapport du technicien</b><br><small>${fmt(r.date)}</small><p>${esc(r.texte)}</p>${r.photoAvant ? `<small>Avant dépannage</small><img src="${r.photoAvant}" alt="Avant dépannage">` : ""}${apres ? `<br><small>Après dépannage</small><img src="${apres}" alt="Après dépannage">` : ""}</div>` : ""}
 ${p.equipe?.length ? `<small>Équipe : ${p.equipe.map(esc).join(", ")}</small>` : ""}
 ${extra}</div>`;
+};
 
 const empty = t => `<p class="muted">${t}</p>`;
 
@@ -149,12 +158,24 @@ function clientView() {
 <label class="file">Photo de la panne<input name="photo" type="file" accept="image/*"></label>
 <button type="button" class="alt" data-a="geo">Ajouter ma position</button>
 <button style="width:100%">Envoyer la plainte</button></form>
-<h2>Mes plaintes</h2><div id="list">${empty("Chargement…")}</div></main>`;
-  watch(query(collection(db, "plaintes"), where("clientUid", "==", me.uid)), l => {
-    $("#list").innerHTML = l.length ? l.map(p => card(p, p.statut === "rapport"
-      ? `<div class="as"><b>Le problème est-il réglé ?</b><div class="row"><button data-a="conf" data-id="${p.id}" data-v="resolue">Résolu</button><button class="alt" data-a="conf" data-id="${p.id}" data-v="nonresolue">Pas résolu</button></div></div>` : "")).join("")
-      : empty("Aucune plainte pour le moment.");
-  });
+<h2>Suivre une plainte</h2>
+<div class="card"><input id="code" placeholder="Code de suivi (ex. P12-K7M2Q4)" autocapitalize="characters"><button data-a="follow" style="width:100%">Suivre</button></div>
+<h2>Mes plaintes</h2><div id="list"></div></main>`;
+  track();
+}
+function track() {
+  clear();
+  const m = new Map();
+  const draw = () => {
+    const l = [...m.values()].sort((a, b) => b.numero - a.numero);
+    $("#list").innerHTML = l.length ? l.map(p => card(p,
+      (p.statut === "rapport" ? `<div class="as"><b>Le technicien a envoyé son rapport. Le problème est-il réglé ?</b><div class="row"><button data-a="conf" data-id="${p.id}" data-v="resolue">Résolu</button><button class="alt" data-a="conf" data-id="${p.id}" data-v="nonresolue">Pas résolu</button></div></div>` : "")
+      + `<small>Code de suivi : <b>${esc(p.id)}</b></small>`)).join("")
+      : empty("Aucune plainte suivie sur cet appareil. Envoie une plainte ou entre un code de suivi.");
+  };
+  getSaved().forEach(id => unsubs.push(onSnapshot(doc(db, "plaintes", id),
+    s => { s.exists() ? m.set(id, { id, ...s.data() }) : m.delete(id); draw(); }, err)));
+  draw();
 }
 
 /* ---------- Chef de base ---------- */
@@ -197,7 +218,8 @@ function techView() {
     $("#list").innerHTML = l.length ? l.map(p => card(p, p.statut === "assignee"
       ? `<form class="as" data-s="rapport" data-id="${p.id}"><b>Rapport après travaux</b>
 <textarea name="texte" placeholder="Travaux effectués" required></textarea>
-<label class="file">Photo après travaux<input name="photo" type="file" accept="image/*"></label>
+<label class="file">Photo de la panne avant dépannage (obligatoire)<input name="photoAvant" type="file" accept="image/*" required></label>
+<label class="file">Photo après dépannage (obligatoire)<input name="photoApres" type="file" accept="image/*" required></label>
 <button style="width:100%">Envoyer le rapport</button></form>` : "")).join("")
       : empty("Aucune plainte assignée pour le moment.");
   });
@@ -229,6 +251,13 @@ const A = {
       () => { el.textContent = "Ajouter ma position"; showErr("Position refusée ou indisponible."); },
       { enableHighAccuracy: true, timeout: 15000 });
   },
+  follow: async () => {
+    const id = $("#code").value.trim().toUpperCase();
+    if (!id) return;
+    const s = await getDoc(doc(db, "plaintes", id));
+    if (!s.exists()) return showErr("Code introuvable. Vérifie-le.");
+    saveIds([...getSaved(), id]); $("#code").value = ""; track();
+  },
   conf: el => updateDoc(doc(db, "plaintes", el.dataset.id), { statut: el.dataset.v, confirmeLe: new Date().toISOString() }),
   tab: el => {
     document.querySelectorAll(".tab").forEach(b => b.classList.toggle("on", b === el));
@@ -259,17 +288,20 @@ const S = {
     const d = Object.fromEntries(new FormData(f));
     const file = f.photo.files[0];
     const ph = file ? await photo(file) : "";
-    const cref = doc(db, "counters", "plaintes"), pref = doc(collection(db, "plaintes"));
-    let num;
+    const cref = doc(db, "counters", "plaintes"), code = newCode();
+    let num, pid;
     await runTransaction(db, async t => {
       const c = await t.get(cref);
       num = (c.exists() ? c.data().n : 0) + 1;
+      pid = "P" + num + "-" + code;
       t.set(cref, { n: num });
-      t.set(pref, { numero: num, clientUid: me.uid, nom: d.nom.trim(), tel: d.tel.trim(), quartier: d.quartier.trim(), description: d.description.trim(), photo: ph, geo, statut: "nouvelle", date: new Date().toISOString(), equipe: [], techEmails: [], superieurEmail: "", rapport: null });
+      t.set(doc(db, "plaintes", pid), { numero: num, clientUid: me.uid, nom: d.nom.trim(), tel: d.tel.trim(), quartier: d.quartier.trim(), description: d.description.trim(), photo: ph, geo, statut: "nouvelle", date: new Date().toISOString(), equipe: [], techEmails: [], superieurEmail: "", rapport: null });
     });
     try { localStorage.setItem("socadel_client", JSON.stringify({ nom: d.nom, tel: d.tel, quartier: d.quartier })); } catch {}
+    saveIds([...getSaved(), pid]);
     f.description.value = ""; f.photo.value = ""; geo = null;
-    alert("Plainte n° " + num + " envoyée. Garde ce numéro.");
+    track();
+    alert("Plainte n° " + num + " envoyée.\nCode de suivi : " + pid + "\nGarde ce code.");
   },
   prof: async f => {
     const d = Object.fromEntries(new FormData(f));
@@ -282,9 +314,8 @@ const S = {
     await updateDoc(doc(db, "users", me.uid), { techniciens }); prof.techniciens = techniciens; chefProfil();
   },
   rapport: async f => {
-    const file = f.photo.files[0];
-    const ph = file ? await photo(file) : "";
-    await updateDoc(doc(db, "plaintes", f.dataset.id), { statut: "rapport", rapport: { texte: f.texte.value.trim(), photo: ph, date: new Date().toISOString(), par: me.email } });
+    const [avant, apres] = await Promise.all([photo(f.photoAvant.files[0]), photo(f.photoApres.files[0])]);
+    await updateDoc(doc(db, "plaintes", f.dataset.id), { statut: "rapport", rapport: { texte: f.texte.value.trim(), photoAvant: avant, photoApres: apres, date: new Date().toISOString(), par: me.email } });
   }
 };
 
